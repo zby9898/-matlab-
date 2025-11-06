@@ -4636,35 +4636,47 @@ classdef MatViewerTool < matlab.apps.AppBase
 
         function updateCloseButtonPositions(app)
             % 动态更新关闭按钮的位置（根据 UIAxes 的位置）
-            
+
             % 如果按钮不存在，直接返回
             if ~isvalid(app.CloseBtn2) || ~isvalid(app.CloseBtn3) || ~isvalid(app.CloseBtn4)
                 return;
             end
-            
+
             % 定义按钮大小
-            btnWidth = 10;
-            btnHeight = 10;
+            btnWidth = 30;
+            btnHeight = 25;
             margin = 5;  % 距离坐标轴右上角的距离
-            
+
             % 为每个可见的 Axes 计算按钮位置
             axesList = {app.ImageAxes2, app.ImageAxes3, app.ImageAxes4};
             btnList = {app.CloseBtn2, app.CloseBtn3, app.CloseBtn4};
-            
+
             for i = 1:3
                 ax = axesList{i};
                 btn = btnList{i};
-                
+
                 if strcmp(ax.Visible, 'on')
-                    % 获取坐标轴在面板中的像素位置
-                    axPos = getpixelposition(ax, true);  % 相对于父容器
-                    
+                    % 获取坐标轴相对于图形窗口的绝对位置
+                    axPosAbs = getpixelposition(ax, false);
+
+                    % 获取 Panel 相对于图形窗口的绝对位置
+                    panelPosAbs = getpixelposition(app.MultiViewPanel, false);
+
+                    % 计算坐标轴相对于 Panel 的位置
+                    axPosRel = [axPosAbs(1) - panelPosAbs(1), ...
+                                axPosAbs(2) - panelPosAbs(2), ...
+                                axPosAbs(3), ...
+                                axPosAbs(4)];
+
                     % 计算按钮位置（右上角）
-                    btnX = axPos(1) + axPos(3) - btnWidth - margin;
-                    btnY = axPos(2) + axPos(4) - btnHeight - margin;
-                    
+                    btnX = axPosRel(1) + axPosRel(3) - btnWidth - margin;
+                    btnY = axPosRel(2) + axPosRel(4) - btnHeight - margin;
+
                     btn.Position = [btnX, btnY, btnWidth, btnHeight];
                     btn.Visible = 'on';
+
+                    % 将按钮提到最前面（确保不被 GridLayout 遮挡）
+                    uistack(btn, 'top');
                 else
                     btn.Visible = 'off';
                 end
