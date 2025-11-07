@@ -3349,6 +3349,7 @@ classdef MatViewerTool < matlab.apps.AppBase
 
                             % 默认参数值
                             paramValue = '';
+                            usedFrameInfo = false;  % 标记是否成功使用了帧信息
 
                             % 优先从帧信息中获取
                             if hasFrameInfo && isfield(frameInfoData, paramName)
@@ -3359,8 +3360,10 @@ classdef MatViewerTool < matlab.apps.AppBase
                                     % struct类型：转为JSON字符串显示
                                     try
                                         paramValue = jsonencode(fieldValue);
+                                        usedFrameInfo = true;
                                     catch
                                         paramValue = '<struct>';
+                                        usedFrameInfo = true;
                                     end
                                 elseif isnumeric(fieldValue)
                                     if isscalar(fieldValue)
@@ -3368,23 +3371,31 @@ classdef MatViewerTool < matlab.apps.AppBase
                                     else
                                         paramValue = mat2str(fieldValue);
                                     end
+                                    usedFrameInfo = true;
                                 elseif ischar(fieldValue) || isstring(fieldValue)
                                     paramValue = char(fieldValue);
+                                    usedFrameInfo = true;
                                 elseif islogical(fieldValue)
                                     paramValue = char(string(fieldValue));
+                                    usedFrameInfo = true;
                                 else
+                                    % 帧信息值类型无法识别，fallback到默认值
+                                    usedFrameInfo = false;
+                                end
+                            end
+
+                            % 如果帧信息未使用或无法转换，使用脚本默认值
+                            if ~usedFrameInfo
+                                if length(paramMatches{i}) >= 3 && ~isempty(strtrim(paramMatches{i}{3}))
+                                    % 使用脚本中定义的默认值
+                                    paramValue = strtrim(paramMatches{i}{3});
+                                    fromDefaultValueCount = fromDefaultValueCount + 1;
+                                else
+                                    % 无默认值也无有效帧信息，保持为空
                                     paramValue = '';
                                 end
-
-                                fromFrameInfoCount = fromFrameInfoCount + 1;
-
-                            elseif length(paramMatches{i}) >= 3 && ~isempty(paramMatches{i}{3})
-                                % 使用脚本中定义的默认值（如果有）
-                                paramValue = strtrim(paramMatches{i}{3});
-                                fromDefaultValueCount = fromDefaultValueCount + 1;
                             else
-                                % 无默认值也无帧信息，保持为空
-                                paramValue = '';
+                                fromFrameInfoCount = fromFrameInfoCount + 1;
                             end
 
                             newRow = {paramName, paramValue, paramType, '删除'};
