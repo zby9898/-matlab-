@@ -4977,20 +4977,28 @@ classdef MatViewerTool < matlab.apps.AppBase
                         % 优先从帧信息中获取
                         if hasFrameInfo && isfield(frameInfoData, paramName)
                             paramValue = frameInfoData.(paramName);
-                            fprintf('从frame_info获取参数值\n');
+                            fprintf('从frame_info获取参数值 (类型: %s)\n', class(paramValue));
                         elseif hasDefaultValue
                             % 使用默认值
                             fprintf('使用脚本默认值: ''%s''\n', defaultValueStr);
                             paramValue = MatViewerTool.parseParamValue(defaultValueStr, paramType);
-                            fprintf('解析后的值: %s\n', mat2str(paramValue));
+                            try
+                                fprintf('解析后的值: %s (类型: %s)\n', mat2str(paramValue), class(paramValue));
+                            catch
+                                fprintf('解析后的值: [复杂类型] (类型: %s)\n', class(paramValue));
+                            end
                         else
                             % 无默认值，使用类型默认值
                             paramValue = MatViewerTool.getTypeDefaultValue(paramType);
-                            fprintf('使用类型默认值: %s\n', mat2str(paramValue));
+                            try
+                                fprintf('使用类型默认值: %s (类型: %s)\n', mat2str(paramValue), class(paramValue));
+                            catch
+                                fprintf('使用类型默认值: [复杂类型] (类型: %s)\n', class(paramValue));
+                            end
                         end
 
                         params.(paramName) = paramValue;
-                        fprintf('最终存入params.%s = %s\n', paramName, mat2str(paramValue));
+                        fprintf('最终存入params.%s (类型: %s)\n', paramName, class(paramValue));
                     end
                 end
 
