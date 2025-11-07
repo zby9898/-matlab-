@@ -4342,27 +4342,56 @@ classdef MatViewerTool < matlab.apps.AppBase
         
         function displayImageInAxes(app, ax, viewIndex)
             % 在指定axes中显示图像
-            % viewIndex: 1=原图, 2=预处理1, 3=预处理2, 4=预处理4
-            
+            % viewIndex: 1=原图, 2=CFAR, 3=非相参积累, 4=自定义预处理
+
             cla(ax);
-            
-            % 获取数据
+
+            % 获取数据和标题
             if viewIndex == 1
                 % 显示原图
                 data = app.MatData{app.CurrentIndex};
                 titleStr = '原图';
             else
                 % 显示预处理结果
-                prepIndex = viewIndex - 1;
                 if ~isempty(app.PreprocessingResults) && ...
                    app.CurrentIndex <= size(app.PreprocessingResults, 1) && ...
                    ~isempty(app.PreprocessingResults{app.CurrentIndex, viewIndex})
+                    % 有预处理结果
                     data = app.PreprocessingResults{app.CurrentIndex, viewIndex};
-                    titleStr = app.PreprocessingList{prepIndex}.name;
+
+                    % 根据viewIndex确定标题
+                    if viewIndex == 2
+                        titleStr = 'CFAR';
+                    elseif viewIndex == 3
+                        titleStr = '非相参积累';
+                    elseif viewIndex == 4
+                        % 自定义预处理，从PreprocessingList获取
+                        if ~isempty(app.PreprocessingList)
+                            titleStr = app.PreprocessingList{1}.name;
+                        else
+                            titleStr = '自定义预处理';
+                        end
+                    else
+                        titleStr = sprintf('预处理%d', viewIndex);
+                    end
                 else
                     % 如果预处理结果不存在，显示原图
                     data = app.MatData{app.CurrentIndex};
-                    titleStr = sprintf('%s (待处理)', app.PreprocessingList{prepIndex}.name);
+
+                    % 根据viewIndex确定待处理标题
+                    if viewIndex == 2
+                        titleStr = 'CFAR (待处理)';
+                    elseif viewIndex == 3
+                        titleStr = '非相参积累 (待处理)';
+                    elseif viewIndex == 4
+                        if ~isempty(app.PreprocessingList)
+                            titleStr = sprintf('%s (待处理)', app.PreprocessingList{1}.name);
+                        else
+                            titleStr = '自定义预处理 (待处理)';
+                        end
+                    else
+                        titleStr = sprintf('预处理%d (待处理)', viewIndex);
+                    end
                 end
             end
             
@@ -4830,23 +4859,25 @@ classdef MatViewerTool < matlab.apps.AppBase
                 end
 
                 % 填充参数值
-                for i = 1:length(paramMatches)
-                    paramName = strtrim(paramMatches{i}{1});
-                    paramType = strtrim(paramMatches{i}{2});
+                if ~isempty(paramMatches)
+                    for i = 1:length(paramMatches)
+                        paramName = strtrim(paramMatches{i}{1});
+                        paramType = strtrim(paramMatches{i}{2});
 
-                    % 优先从帧信息中获取
-                    if hasFrameInfo && isfield(frameInfoData, paramName)
-                        paramValue = frameInfoData.(paramName);
-                    elseif length(paramMatches{i}) >= 3 && ~isempty(paramMatches{i}{3})
-                        % 使用默认值
-                        defaultStr = strtrim(paramMatches{i}{3});
-                        paramValue = MatViewerTool.parseParamValue(defaultStr, paramType);
-                    else
-                        % 无默认值，使用类型默认值
-                        paramValue = MatViewerTool.getTypeDefaultValue(paramType);
+                        % 优先从帧信息中获取
+                        if hasFrameInfo && isfield(frameInfoData, paramName)
+                            paramValue = frameInfoData.(paramName);
+                        elseif length(paramMatches{i}) >= 3 && ~isempty(strtrim(paramMatches{i}{3}))
+                            % 使用默认值
+                            defaultStr = strtrim(paramMatches{i}{3});
+                            paramValue = MatViewerTool.parseParamValue(defaultStr, paramType);
+                        else
+                            % 无默认值，使用类型默认值
+                            paramValue = MatViewerTool.getTypeDefaultValue(paramType);
+                        end
+
+                        params.(paramName) = paramValue;
                     end
-
-                    params.(paramName) = paramValue;
                 end
 
                 % 创建预处理配置
