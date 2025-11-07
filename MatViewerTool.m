@@ -3338,8 +3338,9 @@ classdef MatViewerTool < matlab.apps.AppBase
                     % 由于MATLAB的可选捕获组在未匹配时不会出现在结果中，需要分两次匹配
 
                     % 模式1: 有默认值（3个捕获组）
-                    patternWithDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*,\s*(.+)';
-                    matchesWithDefault = regexp(content, patternWithDefault, 'tokens', 'lineanchors');
+                    % 使用 [^\n\r]+ 确保只匹配到行尾，避免贪婪匹配
+                    patternWithDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*,\s*([^\n\r]+)';
+                    matchesWithDefault = regexp(content, patternWithDefault, 'tokens');
 
                     % 模式2: 无默认值（2个捕获组）
                     patternWithoutDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*$';
@@ -4920,8 +4921,9 @@ classdef MatViewerTool < matlab.apps.AppBase
                 % 由于MATLAB的可选捕获组在未匹配时不会出现在结果中，需要分两次匹配
 
                 % 模式1: 有默认值（3个捕获组）
-                patternWithDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*,\s*(.+)';
-                matchesWithDefault = regexp(content, patternWithDefault, 'tokens', 'lineanchors');
+                % 使用 [^\n\r]+ 确保只匹配到行尾，避免贪婪匹配
+                patternWithDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*,\s*([^\n\r]+)';
+                matchesWithDefault = regexp(content, patternWithDefault, 'tokens');
 
                 % 模式2: 无默认值（2个捕获组）
                 patternWithoutDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*$';
