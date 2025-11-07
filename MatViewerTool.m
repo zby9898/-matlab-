@@ -3272,12 +3272,19 @@ classdef MatViewerTool < matlab.apps.AppBase
             % ========== 回调函数 ==========
             
             function onTypeChanged(~, ~)
-                if strcmp(prepTypeDropdown.Value, '自定义...')
+                prepType = prepTypeDropdown.Value;
+
+                if strcmp(prepType, '自定义...')
                     customNamePanel.Visible = 'on';
                     contentLayout.RowHeight = {95, 95, 125, '1x'};
                 else
                     customNamePanel.Visible = 'off';
                     contentLayout.RowHeight = {95, 0, 125, '1x'};
+
+                    % 如果选择CFAR或非相参积累，且默认选择"使用默认脚本"，自动加载
+                    if (strcmp(prepType, 'CFAR') || strcmp(prepType, '非相参积累')) && defaultScriptRadio.Value
+                        loadDefaultScript(prepType);
+                    end
                 end
             end
             
@@ -4826,10 +4833,10 @@ classdef MatViewerTool < matlab.apps.AppBase
                     elseif length(paramMatches{i}) >= 3 && ~isempty(paramMatches{i}{3})
                         % 使用默认值
                         defaultStr = strtrim(paramMatches{i}{3});
-                        paramValue = parseParamValue(defaultStr, paramType);
+                        paramValue = MatViewerTool.parseParamValue(defaultStr, paramType);
                     else
                         % 无默认值，使用类型默认值
-                        paramValue = getTypeDefaultValue(paramType);
+                        paramValue = MatViewerTool.getTypeDefaultValue(paramType);
                     end
 
                     params.(paramName) = paramValue;
@@ -4951,6 +4958,9 @@ classdef MatViewerTool < matlab.apps.AppBase
             end
         end
 
+    end
+
+    methods (Static)
         function value = parseParamValue(valueStr, paramType)
             % 解析参数值字符串
             % valueStr: 参数值字符串
@@ -5007,6 +5017,5 @@ classdef MatViewerTool < matlab.apps.AppBase
                     value = '';
             end
         end
-
     end
 end
