@@ -1,6 +1,5 @@
 classdef MatViewerTool < matlab.apps.AppBase
     % 实验数据可视化处理工具 - MATLAB版本
-    % 完全复刻Python PyQt5版本的功能和界面
     
     properties (Access = public)
         UIFigure                matlab.ui.Figure
@@ -1135,9 +1134,55 @@ classdef MatViewerTool < matlab.apps.AppBase
                         headers = headers(validIdx);
                         values = values(validIdx);
                         
+                        % 确保 headers 也是字符串
+                        for i = 1:length(headers)
+                            if ~ischar(headers{i}) && ~isstring(headers{i})
+                                if isnumeric(headers{i})
+                                    headers{i} = num2str(headers{i});
+                                elseif isdatetime(headers{i})
+                                    headers{i} = char(headers{i});
+                                else
+                                    try
+                                        headers{i} = char(string(headers{i}));
+                                    catch
+                                        headers{i} = sprintf('字段%d', i);
+                                    end
+                                end
+                            end
+                        end
+                        
+                        % 将所有值转换为字符串（处理各种数据类型）
                         for i = 1:length(values)
-                            if isnumeric(values{i})
-                                values{i} = num2str(values{i});
+                            if isempty(values{i})
+                                values{i} = '';
+                            elseif isnumeric(values{i})
+                                if isnan(values{i})
+                                    values{i} = '';
+                                else
+                                    values{i} = num2str(values{i});
+                                end
+                            elseif isdatetime(values{i})
+                                % datetime 类型转换为字符串
+                                values{i} = char(values{i});
+                            elseif isduration(values{i})
+                                % duration 类型转换为字符串
+                                values{i} = char(values{i});
+                            elseif islogical(values{i})
+                                % logical 类型转换为字符串
+                                values{i} = char(string(values{i}));
+                            elseif iscell(values{i})
+                                % 嵌套的 cell，尝试转换
+                                values{i} = '{cell}';
+                            elseif isstruct(values{i})
+                                % struct 类型
+                                values{i} = '{struct}';
+                            elseif ~ischar(values{i}) && ~isstring(values{i})
+                                % 其他未知类型，尝试转换为字符串
+                                try
+                                    values{i} = char(string(values{i}));
+                                catch
+                                    values{i} = class(values{i});  % 显示类型名
+                                end
                             end
                         end
                         
@@ -1480,9 +1525,6 @@ classdef MatViewerTool < matlab.apps.AppBase
             app.DeselectAllBtn.Enable = 'on';
             app.ExportBtn.Enable = 'on';
             
-            % 创建字段复选框
-            createFieldCheckboxes(app);
-            
             % 显示第一帧
             app.CurrentIndex = 1;
             app.FrameSlider.Value = 1;
@@ -1490,6 +1532,9 @@ classdef MatViewerTool < matlab.apps.AppBase
             updateFrameInfoDisplay(app);
             updateDisplayButtonsState(app);
             updateImageInfoDisplay(app);
+
+            % 创建字段复选框
+            createFieldCheckboxes(app);
             
             % 启用预处理功能
             app.AddPrepBtn.Enable = 'on';
@@ -2424,7 +2469,7 @@ classdef MatViewerTool < matlab.apps.AppBase
         % ==================== 字段勾选相关函数 ====================
         
         function createFieldCheckboxes(app)
-            % 创建字段复选框
+            % 创建字段复选框（从帧信息显示区读取字段名）
             
             % 清空现有复选框
             if isfield(app, 'FieldCheckboxes') && ~isempty(app.FieldCheckboxes)
@@ -2438,18 +2483,47 @@ classdef MatViewerTool < matlab.apps.AppBase
             % 初始化为空 cell 数组
             app.FieldCheckboxes = {};
             
-            % 创建复选框
-            yPos = 10;  % 起始Y坐标
-            for i = 1:length(app.AllFields)
-                checkbox = uicheckbox(app.FieldCheckboxPanel);
-                checkbox.Text = app.AllFields{i};
-                checkbox.Position = [10, yPos, 200, 22];
+            % 从 FieldTable 的第二列读取字段名
+            if isempty(app.FieldTable.Data)
+                return;
+            end
+            
+            tableData = app.FieldTable.Data;
+            numFields = size(tableData, 1);
+            
+            % 使用 uigridlayout 自动布局（去除上下空白）
+            % 清空现有布局
+            delete(app.FieldCheckboxPanel.Children);
+            
+            % 创建新的网格布局
+            checkboxLayout = uigridlayout(app.FieldCheckboxPanel, [numFields, 1]);
+            checkboxLayout.RowHeight = repmat({25}, 1, numFields);  % 每行25像素
+            checkboxLayout.Padding = [5 5 5 5];
+            checkboxLayout.RowSpacing = 2;
+            
+            % 从上到下创建复选框（顺序正确）
+            for i = 1:numFields
+                displayName = tableData{i, 1};  % 第1列：显示名称
+                fieldName = tableData{i, 2};    % 第2列：字段名
                 
-                % 添加到 cell 数组
-                app.FieldCheckboxes{end+1} = checkbox;
-                
-                % 更新Y坐标（向下移动）
-                yPos = yPos + 25;
+                if ~isempty(fieldName)
+                    checkbox = uicheckbox(checkboxLayout);
+                    
+                    % 使用 "显示名称 (字段名)" 的格式
+                    if ~isempty(displayName) && ~strcmp(displayName, fieldName)
+                        checkbox.Text = sprintf('%s (%s)', displayName, fieldName);
+                    else
+                        checkbox.Text = fieldName;
+                    end
+                    
+                    checkbox.Layout.Row = i;  % 按顺序排列
+                    checkbox.Layout.Column = 1;
+                    checkbox.Value = true;  % 默认勾选
+                    checkbox.UserData = fieldName;  % 将实际字段名存在 UserData 中
+                    
+                    % 添加到 cell 数组
+                    app.FieldCheckboxes{end+1} = checkbox;
+                end
             end
         end
         
@@ -2529,12 +2603,14 @@ classdef MatViewerTool < matlab.apps.AppBase
                 return;
             end
             
-            % 获取选中的字段
-            fieldNames = fieldnames(app.FieldCheckboxes);
+            % 获取选中的字段（从 UserData 读取实际字段名）
             selectedFields = {};
-            for i = 1:length(fieldNames)
-                if app.FieldCheckboxes.(fieldNames{i}).Value
-                    selectedFields{end+1} = app.FieldCheckboxes.(fieldNames{i}).Text;
+            for i = 1:length(app.FieldCheckboxes)
+                checkbox = app.FieldCheckboxes{i};
+                if checkbox.Value
+                    % 从 UserData 获取实际字段名
+                    fieldName = checkbox.UserData;
+                    selectedFields{end+1} = fieldName;
                 end
             end
             
@@ -2587,13 +2663,28 @@ classdef MatViewerTool < matlab.apps.AppBase
                 data = app.MatData{frameIdx};
                 exportData = struct();
                 
-                % 复制选中的字段
-                for j = 1:length(selectedFields)
-                    fieldName = selectedFields{j};
-                    if isfield(data, fieldName)
-                        exportData.(fieldName) = data.(fieldName);
+                % 1. 复制 complex_matrix（绘图变量）
+                if isfield(data, 'complex_matrix')
+                    exportData.complex_matrix = data.complex_matrix;
+                end
+                
+                % 2. 创建新的 frame_info，只包含选中的字段
+                if isfield(data, 'frame_info')
+                    newFrameInfo = struct();
+                    
+                    for j = 1:length(selectedFields)
+                        fieldName = selectedFields{j};
+                        if isfield(data.frame_info, fieldName)
+                            newFrameInfo.(fieldName) = data.frame_info.(fieldName);
+                        end
+                    end
+                    
+                    % 只有在有字段时才添加 frame_info
+                    if ~isempty(fieldnames(newFrameInfo))
+                        exportData.frame_info = newFrameInfo;
                     end
                 end
+                
                 
                 % 保存文件
                 [~, name] = fileparts(app.MatFiles{frameIdx});
@@ -4230,7 +4321,20 @@ classdef MatViewerTool < matlab.apps.AppBase
                 end
             end
             % 设置标题功能
-            title(ax, titleStr, 'FontSize', 10, 'Interpreter', 'none');
+            if viewIndex == 1
+                % 原图：普通标题
+                title(ax, titleStr, 'FontSize', 10, 'Interpreter', 'none');
+            else
+                % 预处理视图：添加关闭功能
+                titleStr = sprintf('%s  [关闭×]', titleStr);
+                t = title(ax, titleStr, 'FontSize', 10, 'Interpreter', 'none');
+                
+                % 标题文本添加点击事件
+                t.ButtonDownFcn = @(~,~)closeSubView(app, viewIndex);
+                
+                % 改变鼠标指针为手型（提示可点击）
+                ax.ButtonDownFcn = @(~,~)closeSubView(app, viewIndex);
+            end
         end
         
         function displayMatrixImagescInAxes(app, ax, complexMatrix, useDB, titleStr)
@@ -4665,6 +4769,9 @@ classdef MatViewerTool < matlab.apps.AppBase
                     
                     btn.Position = [btnX, btnY, btnWidth, btnHeight];
                     btn.Visible = 'on';
+                    % 将按钮提到最前面（确保不被 GridLayout 遮挡）
+                    % uistack(btn, 'top'); 但是显示位置一直调不好 算了
+
                 else
                     btn.Visible = 'off';
                 end
