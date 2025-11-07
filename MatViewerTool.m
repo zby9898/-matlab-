@@ -4457,7 +4457,16 @@ classdef MatViewerTool < matlab.apps.AppBase
             imagesc(ax, [1 cols], [1 rows], displayMatrix);
             ax.YDir = 'normal';
             colormap(ax, parula);
-            caxis(ax, [min(displayMatrix(:)), max(displayMatrix(:))]);
+
+            % 设置颜色范围，处理min=max的情况
+            minVal = min(displayMatrix(:));
+            maxVal = max(displayMatrix(:));
+            if maxVal > minVal
+                caxis(ax, [minVal, maxVal]);
+            else
+                % 所有值相同，设置一个小范围
+                caxis(ax, [minVal-eps, minVal+eps]);
+            end
             
             title(ax, titleStr, 'FontSize', 10);
             xlabel(ax, '距离');
@@ -5045,29 +5054,55 @@ classdef MatViewerTool < matlab.apps.AppBase
 
     methods (Static)
         function value = parseParamValue(valueStr, paramType)
-            % 解析参数值字符串
+            % 解析参数值字符串（用于从脚本默认值字符串解析）
             % valueStr: 参数值字符串
             % paramType: 参数类型 (double, int, string, bool, struct)
 
+            % 如果已经是数值类型，直接返回
+            if isnumeric(valueStr)
+                switch lower(paramType)
+                    case 'double'
+                        value = double(valueStr);
+                    case 'int'
+                        value = round(double(valueStr));
+                    otherwise
+                        value = valueStr;
+                end
+                return;
+            end
+
+            % 处理字符串输入
             switch lower(paramType)
                 case 'double'
-                    value = str2double(valueStr);
+                    value = str2double(strtrim(valueStr));
                     if isnan(value)
                         value = 0;
                     end
+
                 case 'int'
-                    value = round(str2double(valueStr));
+                    value = round(str2double(strtrim(valueStr)));
                     if isnan(value)
                         value = 0;
                     end
+
                 case 'string'
-                    value = valueStr;
+                    % 去除可能的引号
+                    value = strtrim(valueStr);
+                    if (startsWith(value, '''') && endsWith(value, '''')) || ...
+                       (startsWith(value, '"') && endsWith(value, '"'))
+                        value = value(2:end-1);
+                    end
+
                 case 'bool'
+                    valueStr = strtrim(valueStr);
                     if strcmpi(valueStr, 'true') || strcmp(valueStr, '1')
                         value = true;
-                    else
+                    elseif strcmpi(valueStr, 'false') || strcmp(valueStr, '0')
                         value = false;
+                    else
+                        value = logical(str2double(valueStr));
                     end
+
                 case 'struct'
                     try
                         value = jsondecode(valueStr);
@@ -5078,6 +5113,7 @@ classdef MatViewerTool < matlab.apps.AppBase
                             value = struct();
                         end
                     end
+
                 otherwise
                     value = valueStr;
             end
