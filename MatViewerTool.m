@@ -3335,7 +3335,8 @@ classdef MatViewerTool < matlab.apps.AppBase
                     end
                     
                     % 匹配PARAM注释（支持有无默认值两种格式）
-                    paramPattern = '%\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*([^\n\r]+))?';
+                    % 支持 % 或 %% 开头，使用 .+? 非贪婪匹配默认值
+                    paramPattern = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*(.+?))?(?:\r?\n|$)';
                     paramMatches = regexp(content, paramPattern, 'tokens');
 
                     % DEBUG: 打印匹配结果
@@ -4903,7 +4904,8 @@ classdef MatViewerTool < matlab.apps.AppBase
                 fclose(fid);
 
                 % 解析参数
-                paramPattern = '%\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*([^\n\r]+))?';
+                % 支持 % 或 %% 开头，使用 .+? 非贪婪匹配默认值
+                paramPattern = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*(.+?))?(?:\r?\n|$)';
                 paramMatches = regexp(content, paramPattern, 'tokens');
 
                 % DEBUG: 打印匹配结果
