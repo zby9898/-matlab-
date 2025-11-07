@@ -850,21 +850,23 @@ classdef MatViewerTool < matlab.apps.AppBase
             app.ShowOriginalCheck.Layout.Column = 2;
             app.ShowOriginalCheck.ValueChangedFcn = @(~,~) onShowOriginalChanged(app);
             
-            % 预处理1按钮
+            % CFAR按钮（默认预处理1）
             app.ShowPrep1Btn = uibutton(prepLayout, 'push');
-            app.ShowPrep1Btn.Text = '预处理1';
+            app.ShowPrep1Btn.Text = 'CFAR';
             app.ShowPrep1Btn.Enable = 'off';
             app.ShowPrep1Btn.Layout.Row = 1;
             app.ShowPrep1Btn.Layout.Column = 3;
-            app.ShowPrep1Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executePrepOnCurrentFrame(app, 1), true);
-            
-            % 预处理2按钮
+            app.ShowPrep1Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executeDefaultPrep(app, 1), true);
+            app.ShowPrep1Btn.Tooltip = 'CFAR检测预处理';
+
+            % 非相参积累按钮（默认预处理2）
             app.ShowPrep2Btn = uibutton(prepLayout, 'push');
-            app.ShowPrep2Btn.Text = '预处理2';
+            app.ShowPrep2Btn.Text = '非相参积累';
             app.ShowPrep2Btn.Enable = 'off';
             app.ShowPrep2Btn.Layout.Row = 1;
             app.ShowPrep2Btn.Layout.Column = 4;
-            app.ShowPrep2Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executePrepOnCurrentFrame(app, 2), true);
+            app.ShowPrep2Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executeDefaultPrep(app, 2), true);
+            app.ShowPrep2Btn.Tooltip = '非相参积累预处理';
             
             % 预处理3按钮
             app.ShowPrep3Btn = uibutton(prepLayout, 'push');
@@ -1538,7 +1540,9 @@ classdef MatViewerTool < matlab.apps.AppBase
             
             % 启用预处理功能
             app.AddPrepBtn.Enable = 'on';
-            
+            app.ShowPrep1Btn.Enable = 'on';  % 启用CFAR按钮
+            app.ShowPrep2Btn.Enable = 'on';  % 启用非相参积累按钮
+
             % 初始化预处理结果存储
             if isempty(app.PreprocessingResults)
                 app.PreprocessingResults = cell(length(app.MatData), 4);
@@ -3130,7 +3134,7 @@ classdef MatViewerTool < matlab.apps.AppBase
             typeLayout.Padding = [15 15 15 15];
             
             prepTypeDropdown = uidropdown(typeLayout);
-            prepTypeDropdown.Items = {'-- 请选择 --', 'CFAR检测', '自适应滤波', 'MTI处理', '门限检测', '自定义...'};
+            prepTypeDropdown.Items = {'-- 请选择 --', 'CFAR', '非相参积累', '自定义...'};
             prepTypeDropdown.Value = '-- 请选择 --';
             prepTypeDropdown.Layout.Row = 1;
             prepTypeDropdown.Layout.Column = 1;
@@ -3285,6 +3289,12 @@ classdef MatViewerTool < matlab.apps.AppBase
                     scriptPathField.Visible = 'off';
                     browseBtn.Visible = 'off';
                     scriptPathField.Value = '';
+
+                    % 如果选择"使用默认脚本"且预处理类型是CFAR或非相参积累，自动加载默认脚本
+                    prepType = prepTypeDropdown.Value;
+                    if strcmp(prepType, 'CFAR') || strcmp(prepType, '非相参积累')
+                        loadDefaultScript(prepType);
+                    end
                 end
             end
             
@@ -3381,13 +3391,37 @@ classdef MatViewerTool < matlab.apps.AppBase
                                 length(paramMatches)), '成功', 'Icon', 'success');
                         end
                     else
-                        uialert(dlg, sprintf('未在脚本中找到参数定义。\n\n参数定义格式：\n%% PARAM: 参数名, 类型\n\n示例：\n%% PARAM: threshold, double'), '提示');
+                        uialert(dlg, sprintf('未在脚本中找到参数定义。\n\n参数定义格式：\n%% PARAM: 参数名, 类型\n%% PARAM: 参数名, 类型, 默认值\n\n示例：\n%% PARAM: threshold, double\n%% PARAM: window_size, double, 5'), '提示');
                     end
                 catch ME
                     uialert(dlg, sprintf('读取脚本失败：\n%s', ME.message), '错误', 'Icon', 'error');
                 end
             end
-            
+
+            function loadDefaultScript(prepType)
+                % 加载默认预处理脚本
+                % 获取当前脚本所在目录
+                scriptPath = fileparts(mfilename('fullpath'));
+
+                % 根据类型选择默认脚本
+                if strcmp(prepType, 'CFAR')
+                    scriptFile = fullfile(scriptPath, 'default_cfar.m');
+                elseif strcmp(prepType, '非相参积累')
+                    scriptFile = fullfile(scriptPath, 'default_noncoherent_integration.m');
+                else
+                    return;
+                end
+
+                % 检查脚本文件是否存在
+                if ~exist(scriptFile, 'file')
+                    uialert(dlg, sprintf('默认预处理脚本不存在：\n%s', scriptFile), '错误');
+                    return;
+                end
+
+                % 自动加载脚本参数
+                tryAutoDetectFromScript(scriptFile);
+            end
+
             function autoDetectParams(~, ~)
                 prepType = prepTypeDropdown.Value;
                 
@@ -3402,8 +3436,17 @@ classdef MatViewerTool < matlab.apps.AppBase
                     else
                         uialert(dlg, '请先选择自定义脚本文件！', '提示');
                     end
+                elseif strcmp(prepType, 'CFAR') || strcmp(prepType, '非相参积累')
+                    % 对于CFAR和非相参积累，如果选择"使用默认脚本"，则从默认脚本文件加载
+                    if defaultScriptRadio.Value
+                        loadDefaultScript(prepType);
+                    elseif customScriptRadio.Value && ~isempty(scriptPathField.Value)
+                        tryAutoDetectFromScript(scriptPathField.Value);
+                    else
+                        uialert(dlg, '请先选择脚本来源！', '提示');
+                    end
                 else
-                    % 从默认参数模板加载
+                    % 从默认参数模板加载（保留旧的逻辑以防万一）
                     defaultParams = getDefaultParams(prepType);
                     if ~isempty(defaultParams)
                         % 检查是否有帧信息
@@ -3538,7 +3581,22 @@ classdef MatViewerTool < matlab.apps.AppBase
                         return;
                     end
                 else
-                    scriptPath = 'default';
+                    % 使用默认脚本
+                    if strcmp(prepType, 'CFAR')
+                        scriptDir = fileparts(mfilename('fullpath'));
+                        scriptPath = fullfile(scriptDir, 'default_cfar.m');
+                    elseif strcmp(prepType, '非相参积累')
+                        scriptDir = fileparts(mfilename('fullpath'));
+                        scriptPath = fullfile(scriptDir, 'default_noncoherent_integration.m');
+                    else
+                        scriptPath = 'default';
+                    end
+
+                    % 检查默认脚本是否存在
+                    if ~strcmp(scriptPath, 'default') && ~isfile(scriptPath)
+                        uialert(dlg, sprintf('默认预处理脚本不存在：\n%s', scriptPath), '错误', 'Icon', 'error');
+                        return;
+                    end
                 end
                 
                 % 获取参数
@@ -3663,7 +3721,10 @@ classdef MatViewerTool < matlab.apps.AppBase
                         '───────────────────────────────────────────────────────────\n\n', ...
                         '【2. 参数定义格式】\n\n', ...
                         '在脚本顶部注释中使用以下格式声明参数：\n\n', ...
-                        '    %% PARAM: 参数名, 数据类型\n\n', ...
+                        '    %% PARAM: 参数名, 数据类型\n', ...
+                        '    %% PARAM: 参数名, 数据类型, 默认值\n\n', ...
+                        '如果有默认值，在导入脚本时会自动填充。\n', ...
+                        '如果参数名在帧信息中存在，会优先使用帧信息中的值。\n\n', ...
                         '支持的数据类型：\n', ...
                         '    • double  - 双精度浮点数\n', ...
                         '    • int     - 整数\n', ...
@@ -3676,11 +3737,11 @@ classdef MatViewerTool < matlab.apps.AppBase
                         '%% MY_FILTER 自定义滤波器\n', ...
                         '%%\n', ...
                         '%% 参数定义：\n', ...
-                        '%% PARAM: threshold, double\n', ...
-                        '%% PARAM: window_size, int\n', ...
-                        '%% PARAM: method, string\n', ...
+                        '%% PARAM: threshold, double, 0.5\n', ...
+                        '%% PARAM: window_size, int, 16\n', ...
+                        '%% PARAM: method, string, gaussian\n', ...
                         '%% PARAM: config, struct\n', ...
-                        '%% PARAM: enable_filter, bool\n\n', ...
+                        '%% PARAM: enable_filter, bool, true\n\n', ...
                         '    %% 获取参数\n', ...
                         '    threshold = getParam(params, ''threshold'', 0.5);\n', ...
                         '    window_size = getParam(params, ''window_size'', 16);\n', ...
@@ -4457,12 +4518,10 @@ classdef MatViewerTool < matlab.apps.AppBase
                 app.PreprocessingList = {};
                 app.PreprocessingResults = {};
                 
-                % 重置按钮状态
+                % 重置按钮状态（保留默认预处理按钮）
                 app.ShowOriginalCheck.Value = true;
-                app.ShowPrep1Btn.Enable = 'off';
-                app.ShowPrep1Btn.Text = '预处理1';
-                app.ShowPrep2Btn.Enable = 'off';
-                app.ShowPrep2Btn.Text = '预处理2';
+                % CFAR和非相参积累按钮保持启用和文本不变
+                % app.ShowPrep1Btn和ShowPrep2Btn是默认预处理，不清除
                 app.ShowPrep3Btn.Enable = 'off';
                 app.ShowPrep3Btn.Text = '预处理3';
                 
@@ -4694,7 +4753,121 @@ classdef MatViewerTool < matlab.apps.AppBase
                 uialert(app.UIFigure, sprintf('执行 %s 失败', prepConfig.name), '错误');
             end
         end
-        
+
+        function executeDefaultPrep(app, defaultPrepIndex)
+            % 执行默认预处理（CFAR或非相参积累）
+            % defaultPrepIndex: 1=CFAR, 2=非相参积累
+
+            if isempty(app.MatData) || app.CurrentIndex > length(app.MatData)
+                uialert(app.UIFigure, '请先导入数据', '提示');
+                return;
+            end
+
+            % 获取当前脚本所在目录
+            scriptPath = fileparts(mfilename('fullpath'));
+
+            % 根据索引选择默认脚本
+            if defaultPrepIndex == 1
+                % CFAR
+                scriptFile = fullfile(scriptPath, 'default_cfar.m');
+                prepName = 'CFAR';
+                prepType = 'CFAR';
+            elseif defaultPrepIndex == 2
+                % 非相参积累
+                scriptFile = fullfile(scriptPath, 'default_noncoherent_integration.m');
+                prepName = '非相参积累';
+                prepType = '非相参积累';
+            else
+                return;
+            end
+
+            % 检查脚本文件是否存在
+            if ~exist(scriptFile, 'file')
+                uialert(app.UIFigure, sprintf('默认预处理脚本不存在：\n%s', scriptFile), '错误');
+                return;
+            end
+
+            % 读取脚本内容并解析参数
+            try
+                fid = fopen(scriptFile, 'r');
+                if fid == -1
+                    uialert(app.UIFigure, '无法打开默认预处理脚本', '错误');
+                    return;
+                end
+                content = fread(fid, '*char')';
+                fclose(fid);
+
+                % 解析参数
+                paramPattern = '%\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*([^\n\r]+))?';
+                paramMatches = regexp(content, paramPattern, 'tokens');
+
+                % 构建参数结构
+                params = struct();
+
+                % 获取当前帧信息
+                hasFrameInfo = false;
+                frameInfoData = struct();
+                if ~isempty(app.MatData) && app.CurrentIndex <= length(app.MatData)
+                    currentData = app.MatData{app.CurrentIndex};
+                    if isfield(currentData, 'frame_info')
+                        hasFrameInfo = true;
+                        frameInfoData = currentData.frame_info;
+                    end
+                end
+
+                % 填充参数值
+                for i = 1:length(paramMatches)
+                    paramName = strtrim(paramMatches{i}{1});
+                    paramType = strtrim(paramMatches{i}{2});
+
+                    % 优先从帧信息中获取
+                    if hasFrameInfo && isfield(frameInfoData, paramName)
+                        paramValue = frameInfoData.(paramName);
+                    elseif length(paramMatches{i}) >= 3 && ~isempty(paramMatches{i}{3})
+                        % 使用默认值
+                        defaultStr = strtrim(paramMatches{i}{3});
+                        paramValue = parseParamValue(defaultStr, paramType);
+                    else
+                        % 无默认值，使用类型默认值
+                        paramValue = getTypeDefaultValue(paramType);
+                    end
+
+                    params.(paramName) = paramValue;
+                end
+
+                % 创建预处理配置
+                prepConfig = struct();
+                prepConfig.name = prepName;
+                prepConfig.type = prepType;
+                prepConfig.scriptPath = scriptFile;
+                prepConfig.params = params;
+                prepConfig.isDefault = true;  % 标记为默认预处理
+
+                % 显示处理中状态
+                oldStatus = app.StatusLabel.Text;
+                app.StatusLabel.Text = sprintf('正在执行 %s ...', prepName);
+                app.StatusLabel.FontColor = [1 0.6 0];
+                drawnow;
+
+                % 执行预处理
+                success = executePreprocessingOnCurrentData(app, prepConfig);
+
+                % 恢复状态
+                app.StatusLabel.Text = oldStatus;
+                app.StatusLabel.FontColor = [0 0.5 0];
+
+                if success
+                    % 更新多视图显示
+                    updateMultiView(app);
+                else
+                    uialert(app.UIFigure, sprintf('执行 %s 失败', prepName), '错误');
+                end
+
+            catch ME
+                uialert(app.UIFigure, sprintf('加载默认预处理失败：\n%s', ME.message), '错误');
+            end
+        end
+
         function closeSubView(app, axesIndex)
             % 关闭指定的子视图
             % axesIndex: 2, 3, 4 (1是原图，不能关闭)
@@ -4775,6 +4948,63 @@ classdef MatViewerTool < matlab.apps.AppBase
                 else
                     btn.Visible = 'off';
                 end
+            end
+        end
+
+        function value = parseParamValue(valueStr, paramType)
+            % 解析参数值字符串
+            % valueStr: 参数值字符串
+            % paramType: 参数类型 (double, int, string, bool, struct)
+
+            switch lower(paramType)
+                case 'double'
+                    value = str2double(valueStr);
+                    if isnan(value)
+                        value = 0;
+                    end
+                case 'int'
+                    value = round(str2double(valueStr));
+                    if isnan(value)
+                        value = 0;
+                    end
+                case 'string'
+                    value = valueStr;
+                case 'bool'
+                    if strcmpi(valueStr, 'true') || strcmp(valueStr, '1')
+                        value = true;
+                    else
+                        value = false;
+                    end
+                case 'struct'
+                    try
+                        value = jsondecode(valueStr);
+                    catch
+                        try
+                            value = eval(valueStr);
+                        catch
+                            value = struct();
+                        end
+                    end
+                otherwise
+                    value = valueStr;
+            end
+        end
+
+        function value = getTypeDefaultValue(paramType)
+            % 获取参数类型的默认值
+            switch lower(paramType)
+                case 'double'
+                    value = 0;
+                case 'int'
+                    value = 0;
+                case 'string'
+                    value = '';
+                case 'bool'
+                    value = false;
+                case 'struct'
+                    value = struct();
+                otherwise
+                    value = '';
             end
         end
 
