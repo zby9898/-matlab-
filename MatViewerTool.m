@@ -868,13 +868,13 @@ classdef MatViewerTool < matlab.apps.AppBase
             app.ShowPrep2Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executeDefaultPrep(app, 2), true);
             app.ShowPrep2Btn.Tooltip = '非相参积累预处理';
             
-            % 预处理3按钮
+            % 预处理3按钮（用于自定义预处理）
             app.ShowPrep3Btn = uibutton(prepLayout, 'push');
             app.ShowPrep3Btn.Text = '预处理3';
             app.ShowPrep3Btn.Enable = 'off';
             app.ShowPrep3Btn.Layout.Row = 1;
             app.ShowPrep3Btn.Layout.Column = 5;
-            app.ShowPrep3Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executePrepOnCurrentFrame(app, 3), true);
+            app.ShowPrep3Btn.ButtonPushedFcn = createCallbackFcn(app, @(~,~)executePrepOnCurrentFrame(app, 1), true);  % 自定义预处理在PreprocessingList中索引为1
             
             % 预处理标签面板（用于显示已添加的预处理）
             app.PrepTagPanel = uipanel(prepLayout);
@@ -3341,18 +3341,19 @@ classdef MatViewerTool < matlab.apps.AppBase
                     if ~isempty(paramMatches)
                         paramTable.Data = cell(0, 4);
                         fromFrameInfoCount = 0;
-                        
+                        fromDefaultValueCount = 0;
+
                         for i = 1:length(paramMatches)
                             paramName = strtrim(paramMatches{i}{1});
                             paramType = strtrim(paramMatches{i}{2});
-                            
+
                             % 默认参数值
                             paramValue = '';
-                            
+
                             % 优先从帧信息中获取
                             if hasFrameInfo && isfield(frameInfoData, paramName)
                                 fieldValue = frameInfoData.(paramName);
-                                
+
                                 % 根据类型格式化显示值
                                 if isstruct(fieldValue)
                                     % struct类型：转为JSON字符串显示
@@ -3374,25 +3375,32 @@ classdef MatViewerTool < matlab.apps.AppBase
                                 else
                                     paramValue = '';
                                 end
-                                
+
                                 fromFrameInfoCount = fromFrameInfoCount + 1;
-                                
+
                             elseif length(paramMatches{i}) >= 3 && ~isempty(paramMatches{i}{3})
                                 % 使用脚本中定义的默认值（如果有）
                                 paramValue = strtrim(paramMatches{i}{3});
+                                fromDefaultValueCount = fromDefaultValueCount + 1;
                             else
                                 % 无默认值也无帧信息，保持为空
                                 paramValue = '';
                             end
-                            
+
                             newRow = {paramName, paramValue, paramType, '删除'};
                             paramTable.Data = [paramTable.Data; newRow];
                         end
-                        
+
                         % 提示信息
-                        if fromFrameInfoCount > 0
+                        if fromFrameInfoCount > 0 && fromDefaultValueCount > 0
+                            uialert(dlg, sprintf('已从脚本中检测到 %d 个参数！\n其中 %d 个参数值从当前帧信息中自动填充，%d 个参数使用了默认值。', ...
+                                length(paramMatches), fromFrameInfoCount, fromDefaultValueCount), '成功', 'Icon', 'success');
+                        elseif fromFrameInfoCount > 0
                             uialert(dlg, sprintf('已从脚本中检测到 %d 个参数！\n其中 %d 个参数值从当前帧信息中自动填充。', ...
                                 length(paramMatches), fromFrameInfoCount), '成功', 'Icon', 'success');
+                        elseif fromDefaultValueCount > 0
+                            uialert(dlg, sprintf('已从脚本中检测到 %d 个参数！\n其中 %d 个参数已使用默认值自动填充。', ...
+                                length(paramMatches), fromDefaultValueCount), '成功', 'Icon', 'success');
                         else
                             uialert(dlg, sprintf('已从脚本中检测到 %d 个参数！\n请手动配置参数值。', ...
                                 length(paramMatches)), '成功', 'Icon', 'success');
@@ -3987,29 +3995,28 @@ classdef MatViewerTool < matlab.apps.AppBase
         
         function updatePreprocessingControls(app)
             % 更新预处理控件状态
-            
+
             numPreps = length(app.PreprocessingList);
-            
-            % 更新按钮
-            buttons = {app.ShowPrep1Btn, app.ShowPrep2Btn, app.ShowPrep3Btn};
-            
-            for i = 1:3
-                if i <= numPreps
-                    buttons{i}.Enable = 'on';
-                    buttons{i}.Text = app.PreprocessingList{i}.name;
-                else
-                    buttons{i}.Enable = 'off';
-                    buttons{i}.Text = sprintf('预处理%d', i);
-                end
+
+            % ShowPrep1Btn和ShowPrep2Btn是固定的默认预处理按钮（CFAR和非相参积累）
+            % 只更新ShowPrep3Btn
+
+            % 只有当有自定义预处理时，才更新第三个按钮
+            if numPreps > 0
+                app.ShowPrep3Btn.Enable = 'on';
+                app.ShowPrep3Btn.Text = app.PreprocessingList{1}.name;  % 第一个自定义预处理
+            else
+                app.ShowPrep3Btn.Enable = 'off';
+                app.ShowPrep3Btn.Text = '预处理3';
             end
-                        
+
             % 更新按钮状态
-            if numPreps < 3
+            if numPreps < 1  % 现在只支持1个自定义预处理（因为前两个是固定的）
                 app.AddPrepBtn.Enable = 'on';
             else
                 app.AddPrepBtn.Enable = 'off';
             end
-            
+
             if numPreps > 0
                 app.ClearPrepBtn.Enable = 'on';
             else
@@ -4118,13 +4125,13 @@ classdef MatViewerTool < matlab.apps.AppBase
                 save(outputFile, '-struct', 'saveData');
                 
                 % 保存到结果缓存
-                prepIndex = length(app.PreprocessingList);
+                % 现在缓存布局：1=原图, 2=CFAR, 3=非相参积累, 4=自定义预处理
                 if isempty(app.PreprocessingResults)
                     app.PreprocessingResults = cell(length(app.MatData), 4);
                 end
-                
-                % 第1列是原始数据，第2-4列是预处理结果
-                app.PreprocessingResults{app.CurrentIndex, prepIndex + 1} = processedData;
+
+                % 自定义预处理始终保存到第4列
+                app.PreprocessingResults{app.CurrentIndex, 4} = processedData;
                 
                 success = true;
                 
@@ -4856,19 +4863,64 @@ classdef MatViewerTool < matlab.apps.AppBase
                 app.StatusLabel.FontColor = [1 0.6 0];
                 drawnow;
 
-                % 执行预处理
-                success = executePreprocessingOnCurrentData(app, prepConfig);
+                % 获取当前帧数据
+                currentData = app.MatData{app.CurrentIndex};
+
+                if ~isfield(currentData, 'complex_matrix')
+                    uialert(app.UIFigure, '当前数据不包含complex_matrix字段！', '错误', 'Icon', 'error');
+                    return;
+                end
+
+                inputMatrix = currentData.complex_matrix;
+
+                % 调用默认脚本
+                [scriptDir, scriptName, ~] = fileparts(scriptFile);
+
+                % 临时添加脚本路径
+                oldPath = addpath(scriptDir);
+
+                try
+                    % 调用脚本函数
+                    scriptFunc = str2func(scriptName);
+                    processedMatrix = scriptFunc(inputMatrix, params);
+
+                    % 验证输出
+                    if ~isnumeric(processedMatrix)
+                        error('脚本输出必须是数值矩阵或向量！');
+                    end
+
+                catch ME
+                    path(oldPath);  % 恢复路径
+                    app.StatusLabel.Text = oldStatus;
+                    app.StatusLabel.FontColor = [0 0.5 0];
+                    uialert(app.UIFigure, sprintf('执行预处理脚本失败：\n%s', ME.message), '错误', 'Icon', 'error');
+                    return;
+                end
+
+                % 恢复路径
+                path(oldPath);
+
+                % 创建处理后的数据
+                processedData = currentData;
+                processedData.complex_matrix = processedMatrix;
+                processedData.preprocessing_info = prepConfig;
+                processedData.preprocessing_time = datetime('now');
+
+                % 初始化预处理结果缓存
+                if isempty(app.PreprocessingResults)
+                    app.PreprocessingResults = cell(length(app.MatData), 4);
+                end
+
+                % 保存到结果缓存（默认预处理固定位置：CFAR=2, 非相参积累=3）
+                cacheIndex = defaultPrepIndex + 1;  % 1->2, 2->3
+                app.PreprocessingResults{app.CurrentIndex, cacheIndex} = processedData;
 
                 % 恢复状态
                 app.StatusLabel.Text = oldStatus;
                 app.StatusLabel.FontColor = [0 0.5 0];
 
-                if success
-                    % 更新多视图显示
-                    updateMultiView(app);
-                else
-                    uialert(app.UIFigure, sprintf('执行 %s 失败', prepName), '错误');
-                end
+                % 更新多视图显示
+                updateMultiView(app);
 
             catch ME
                 uialert(app.UIFigure, sprintf('加载默认预处理失败：\n%s', ME.message), '错误');
