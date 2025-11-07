@@ -3337,15 +3337,36 @@ classdef MatViewerTool < matlab.apps.AppBase
                     % 匹配PARAM注释（支持有无默认值两种格式）
                     paramPattern = '%\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*([^\n\r]+))?';
                     paramMatches = regexp(content, paramPattern, 'tokens');
-                    
+
+                    % DEBUG: 打印匹配结果
+                    fprintf('\n=== 参数解析调试信息 ===\n');
+                    fprintf('找到 %d 个参数匹配\n', length(paramMatches));
+                    fprintf('hasFrameInfo = %d\n', hasFrameInfo);
+
                     if ~isempty(paramMatches)
                         paramTable.Data = cell(0, 4);
                         fromFrameInfoCount = 0;
                         fromDefaultValueCount = 0;
 
                         for i = 1:length(paramMatches)
+                            fprintf('\n--- 参数 %d ---\n', i);
+                            fprintf('匹配元素个数: %d\n', length(paramMatches{i}));
+
                             paramName = strtrim(paramMatches{i}{1});
                             paramType = strtrim(paramMatches{i}{2});
+
+                            fprintf('参数名: %s\n', paramName);
+                            fprintf('参数类型: %s\n', paramType);
+
+                            % 检查是否有第三个元素（默认值）
+                            if length(paramMatches{i}) >= 3
+                                fprintf('第3个元素存在\n');
+                                fprintf('第3个元素原始值: ''%s''\n', paramMatches{i}{3});
+                                fprintf('第3个元素trim后: ''%s''\n', strtrim(paramMatches{i}{3}));
+                                fprintf('第3个元素是否为空: %d\n', isempty(strtrim(paramMatches{i}{3})));
+                            else
+                                fprintf('第3个元素不存在（无默认值）\n');
+                            end
 
                             % 默认参数值
                             paramValue = '';
@@ -3353,6 +3374,7 @@ classdef MatViewerTool < matlab.apps.AppBase
 
                             % 优先从帧信息中获取
                             if hasFrameInfo && isfield(frameInfoData, paramName)
+                                fprintf('在frame_info中找到参数: %s\n', paramName);
                                 fieldValue = frameInfoData.(paramName);
 
                                 % 根据类型格式化显示值
@@ -3361,9 +3383,11 @@ classdef MatViewerTool < matlab.apps.AppBase
                                     try
                                         paramValue = jsonencode(fieldValue);
                                         usedFrameInfo = true;
+                                        fprintf('从frame_info获取struct值（JSON）\n');
                                     catch
                                         paramValue = '<struct>';
                                         usedFrameInfo = true;
+                                        fprintf('从frame_info获取struct值（标记）\n');
                                     end
                                 elseif isnumeric(fieldValue)
                                     if isscalar(fieldValue)
@@ -3372,35 +3396,53 @@ classdef MatViewerTool < matlab.apps.AppBase
                                         paramValue = mat2str(fieldValue);
                                     end
                                     usedFrameInfo = true;
+                                    fprintf('从frame_info获取数值: %s\n', paramValue);
                                 elseif ischar(fieldValue) || isstring(fieldValue)
                                     paramValue = char(fieldValue);
                                     usedFrameInfo = true;
+                                    fprintf('从frame_info获取字符串: %s\n', paramValue);
                                 elseif islogical(fieldValue)
                                     paramValue = char(string(fieldValue));
                                     usedFrameInfo = true;
+                                    fprintf('从frame_info获取逻辑值: %s\n', paramValue);
                                 else
                                     % 帧信息值类型无法识别，fallback到默认值
                                     usedFrameInfo = false;
+                                    fprintf('frame_info值类型无法识别，fallback到默认值\n');
+                                end
+                            else
+                                if hasFrameInfo
+                                    fprintf('frame_info中未找到参数: %s\n', paramName);
                                 end
                             end
 
                             % 如果帧信息未使用或无法转换，使用脚本默认值
+                            fprintf('usedFrameInfo = %d\n', usedFrameInfo);
                             if ~usedFrameInfo
                                 if length(paramMatches{i}) >= 3 && ~isempty(strtrim(paramMatches{i}{3}))
                                     % 使用脚本中定义的默认值
                                     paramValue = strtrim(paramMatches{i}{3});
                                     fromDefaultValueCount = fromDefaultValueCount + 1;
+                                    fprintf('使用脚本默认值: ''%s''\n', paramValue);
                                 else
                                     % 无默认值也无有效帧信息，保持为空
                                     paramValue = '';
+                                    fprintf('无默认值，参数值为空\n');
                                 end
                             else
                                 fromFrameInfoCount = fromFrameInfoCount + 1;
                             end
 
+                            fprintf('最终参数值: ''%s''\n', paramValue);
+
                             newRow = {paramName, paramValue, paramType, '删除'};
                             paramTable.Data = [paramTable.Data; newRow];
                         end
+
+                        fprintf('\n=== 参数解析完成 ===\n');
+                        fprintf('从frame_info获取: %d 个\n', fromFrameInfoCount);
+                        fprintf('从默认值获取: %d 个\n', fromDefaultValueCount);
+                        fprintf('========================\n\n');
 
                         % 提示信息
                         if fromFrameInfoCount > 0 && fromDefaultValueCount > 0
@@ -4864,6 +4906,11 @@ classdef MatViewerTool < matlab.apps.AppBase
                 paramPattern = '%\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*([^\n\r]+))?';
                 paramMatches = regexp(content, paramPattern, 'tokens');
 
+                % DEBUG: 打印匹配结果
+                fprintf('\n=== executeDefaultPrep 参数解析调试信息 ===\n');
+                fprintf('预处理类型: %s\n', prepName);
+                fprintf('找到 %d 个参数匹配\n', length(paramMatches));
+
                 % 构建参数结构
                 params = struct();
 
@@ -4878,27 +4925,55 @@ classdef MatViewerTool < matlab.apps.AppBase
                     end
                 end
 
+                fprintf('hasFrameInfo = %d\n', hasFrameInfo);
+
                 % 填充参数值
                 if ~isempty(paramMatches)
                     for i = 1:length(paramMatches)
+                        fprintf('\n--- 参数 %d ---\n', i);
+                        fprintf('匹配元素个数: %d\n', length(paramMatches{i}));
+
                         paramName = strtrim(paramMatches{i}{1});
                         paramType = strtrim(paramMatches{i}{2});
+
+                        fprintf('参数名: %s\n', paramName);
+                        fprintf('参数类型: %s\n', paramType);
+
+                        % 检查是否有第三个元素（默认值）
+                        if length(paramMatches{i}) >= 3
+                            fprintf('第3个元素存在\n');
+                            fprintf('第3个元素原始值: ''%s''\n', paramMatches{i}{3});
+                            fprintf('第3个元素trim后: ''%s''\n', strtrim(paramMatches{i}{3}));
+                            fprintf('第3个元素是否为空: %d\n', isempty(strtrim(paramMatches{i}{3})));
+                        else
+                            fprintf('第3个元素不存在（无默认值）\n');
+                        end
 
                         % 优先从帧信息中获取
                         if hasFrameInfo && isfield(frameInfoData, paramName)
                             paramValue = frameInfoData.(paramName);
+                            fprintf('从frame_info获取参数值\n');
                         elseif length(paramMatches{i}) >= 3 && ~isempty(strtrim(paramMatches{i}{3}))
                             % 使用默认值
                             defaultStr = strtrim(paramMatches{i}{3});
+                            fprintf('使用脚本默认值: ''%s''\n', defaultStr);
                             paramValue = MatViewerTool.parseParamValue(defaultStr, paramType);
+                            fprintf('解析后的值: %s\n', mat2str(paramValue));
                         else
                             % 无默认值，使用类型默认值
                             paramValue = MatViewerTool.getTypeDefaultValue(paramType);
+                            fprintf('使用类型默认值: %s\n', mat2str(paramValue));
                         end
 
                         params.(paramName) = paramValue;
+                        fprintf('最终存入params.%s = %s\n', paramName, mat2str(paramValue));
                     end
                 end
+
+                fprintf('\n=== executeDefaultPrep 参数解析完成 ===\n');
+                fprintf('params结构体字段:\n');
+                disp(params);
+                fprintf('==========================================\n\n');
 
                 % 创建预处理配置
                 prepConfig = struct();
