@@ -3335,13 +3335,28 @@ classdef MatViewerTool < matlab.apps.AppBase
                     end
                     
                     % 匹配PARAM注释（支持有无默认值两种格式）
-                    % 支持 % 或 %% 开头，使用 .+? 非贪婪匹配默认值
-                    paramPattern = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*(.+?))?(?:\r?\n|$)';
-                    paramMatches = regexp(content, paramPattern, 'tokens');
+                    % 由于MATLAB的可选捕获组在未匹配时不会出现在结果中，需要分两次匹配
+
+                    % 模式1: 有默认值（3个捕获组）
+                    patternWithDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*,\s*(.+)';
+                    matchesWithDefault = regexp(content, patternWithDefault, 'tokens', 'lineanchors');
+
+                    % 模式2: 无默认值（2个捕获组）
+                    patternWithoutDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*$';
+                    matchesWithoutDefault = regexp(content, patternWithoutDefault, 'tokens', 'lineanchors');
+
+                    % 合并结果：将无默认值的匹配添加空字符串作为第3组
+                    paramMatches = matchesWithDefault;
+                    for i = 1:length(matchesWithoutDefault)
+                        % 为无默认值的参数添加空字符串作为第3组
+                        paramMatches{end+1} = {matchesWithoutDefault{i}{1}, matchesWithoutDefault{i}{2}, ''};
+                    end
 
                     % DEBUG: 打印匹配结果
                     fprintf('\n=== 参数解析调试信息 ===\n');
-                    fprintf('找到 %d 个参数匹配\n', length(paramMatches));
+                    fprintf('有默认值的参数: %d 个\n', length(matchesWithDefault));
+                    fprintf('无默认值的参数: %d 个\n', length(matchesWithoutDefault));
+                    fprintf('总共参数: %d 个\n', length(paramMatches));
                     fprintf('hasFrameInfo = %d\n', hasFrameInfo);
 
                     if ~isempty(paramMatches)
@@ -3360,14 +3375,12 @@ classdef MatViewerTool < matlab.apps.AppBase
                             fprintf('参数类型: %s\n', paramType);
 
                             % 检查是否有第三个元素（默认值）
-                            if length(paramMatches{i}) >= 3
-                                fprintf('第3个元素存在\n');
-                                fprintf('第3个元素原始值: ''%s''\n', paramMatches{i}{3});
-                                fprintf('第3个元素trim后: ''%s''\n', strtrim(paramMatches{i}{3}));
-                                fprintf('第3个元素是否为空: %d\n', isempty(strtrim(paramMatches{i}{3})));
-                            else
-                                fprintf('第3个元素不存在（无默认值）\n');
-                            end
+                            % 注意：现在所有参数都有3组，无默认值的第3组为空字符串
+                            defaultValueStr = strtrim(paramMatches{i}{3});
+                            hasDefaultValue = ~isempty(defaultValueStr);
+                            fprintf('第3个元素原始值: ''%s''\n', paramMatches{i}{3});
+                            fprintf('第3个元素trim后: ''%s''\n', defaultValueStr);
+                            fprintf('是否有默认值: %d\n', hasDefaultValue);
 
                             % 默认参数值
                             paramValue = '';
@@ -3420,9 +3433,9 @@ classdef MatViewerTool < matlab.apps.AppBase
                             % 如果帧信息未使用或无法转换，使用脚本默认值
                             fprintf('usedFrameInfo = %d\n', usedFrameInfo);
                             if ~usedFrameInfo
-                                if length(paramMatches{i}) >= 3 && ~isempty(strtrim(paramMatches{i}{3}))
+                                if hasDefaultValue
                                     % 使用脚本中定义的默认值
-                                    paramValue = strtrim(paramMatches{i}{3});
+                                    paramValue = defaultValueStr;
                                     fromDefaultValueCount = fromDefaultValueCount + 1;
                                     fprintf('使用脚本默认值: ''%s''\n', paramValue);
                                 else
@@ -4904,14 +4917,29 @@ classdef MatViewerTool < matlab.apps.AppBase
                 fclose(fid);
 
                 % 解析参数
-                % 支持 % 或 %% 开头，使用 .+? 非贪婪匹配默认值
-                paramPattern = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)(?:\s*,\s*(.+?))?(?:\r?\n|$)';
-                paramMatches = regexp(content, paramPattern, 'tokens');
+                % 由于MATLAB的可选捕获组在未匹配时不会出现在结果中，需要分两次匹配
+
+                % 模式1: 有默认值（3个捕获组）
+                patternWithDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*,\s*(.+)';
+                matchesWithDefault = regexp(content, patternWithDefault, 'tokens', 'lineanchors');
+
+                % 模式2: 无默认值（2个捕获组）
+                patternWithoutDefault = '%%?\s*PARAM:\s*(\w+)\s*,\s*(\w+)\s*$';
+                matchesWithoutDefault = regexp(content, patternWithoutDefault, 'tokens', 'lineanchors');
+
+                % 合并结果：将无默认值的匹配添加空字符串作为第3组
+                paramMatches = matchesWithDefault;
+                for i = 1:length(matchesWithoutDefault)
+                    % 为无默认值的参数添加空字符串作为第3组
+                    paramMatches{end+1} = {matchesWithoutDefault{i}{1}, matchesWithoutDefault{i}{2}, ''};
+                end
 
                 % DEBUG: 打印匹配结果
                 fprintf('\n=== executeDefaultPrep 参数解析调试信息 ===\n');
                 fprintf('预处理类型: %s\n', prepName);
-                fprintf('找到 %d 个参数匹配\n', length(paramMatches));
+                fprintf('有默认值的参数: %d 个\n', length(matchesWithDefault));
+                fprintf('无默认值的参数: %d 个\n', length(matchesWithoutDefault));
+                fprintf('总共参数: %d 个\n', length(paramMatches));
 
                 % 构建参数结构
                 params = struct();
@@ -4933,33 +4961,25 @@ classdef MatViewerTool < matlab.apps.AppBase
                 if ~isempty(paramMatches)
                     for i = 1:length(paramMatches)
                         fprintf('\n--- 参数 %d ---\n', i);
-                        fprintf('匹配元素个数: %d\n', length(paramMatches{i}));
 
                         paramName = strtrim(paramMatches{i}{1});
                         paramType = strtrim(paramMatches{i}{2});
+                        defaultValueStr = strtrim(paramMatches{i}{3});
+                        hasDefaultValue = ~isempty(defaultValueStr);
 
                         fprintf('参数名: %s\n', paramName);
                         fprintf('参数类型: %s\n', paramType);
-
-                        % 检查是否有第三个元素（默认值）
-                        if length(paramMatches{i}) >= 3
-                            fprintf('第3个元素存在\n');
-                            fprintf('第3个元素原始值: ''%s''\n', paramMatches{i}{3});
-                            fprintf('第3个元素trim后: ''%s''\n', strtrim(paramMatches{i}{3}));
-                            fprintf('第3个元素是否为空: %d\n', isempty(strtrim(paramMatches{i}{3})));
-                        else
-                            fprintf('第3个元素不存在（无默认值）\n');
-                        end
+                        fprintf('默认值: ''%s''\n', defaultValueStr);
+                        fprintf('是否有默认值: %d\n', hasDefaultValue);
 
                         % 优先从帧信息中获取
                         if hasFrameInfo && isfield(frameInfoData, paramName)
                             paramValue = frameInfoData.(paramName);
                             fprintf('从frame_info获取参数值\n');
-                        elseif length(paramMatches{i}) >= 3 && ~isempty(strtrim(paramMatches{i}{3}))
+                        elseif hasDefaultValue
                             % 使用默认值
-                            defaultStr = strtrim(paramMatches{i}{3});
-                            fprintf('使用脚本默认值: ''%s''\n', defaultStr);
-                            paramValue = MatViewerTool.parseParamValue(defaultStr, paramType);
+                            fprintf('使用脚本默认值: ''%s''\n', defaultValueStr);
+                            paramValue = MatViewerTool.parseParamValue(defaultValueStr, paramType);
                             fprintf('解析后的值: %s\n', mat2str(paramValue));
                         else
                             % 无默认值，使用类型默认值
