@@ -4976,8 +4976,11 @@ classdef MatViewerTool < matlab.apps.AppBase
 
                         % 优先从帧信息中获取
                         if hasFrameInfo && isfield(frameInfoData, paramName)
-                            paramValue = frameInfoData.(paramName);
-                            fprintf('从frame_info获取参数值 (类型: %s)\n', class(paramValue));
+                            rawValue = frameInfoData.(paramName);
+                            fprintf('从frame_info获取参数值 (原始类型: %s)\n', class(rawValue));
+                            % 进行类型转换（确保类型正确，如int64→double）
+                            paramValue = app.convertParamValue(rawValue, paramType);
+                            fprintf('类型转换后 (类型: %s)\n', class(paramValue));
                         elseif hasDefaultValue
                             % 使用默认值
                             fprintf('使用脚本默认值: ''%s''\n', defaultValueStr);
